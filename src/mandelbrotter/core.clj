@@ -119,7 +119,7 @@
         (let [x (- width (rem i width) 1)
               y (- height (quot i width) 1)]
           (prof :setColor (.setColor g (if (:divergence? p)
-                                         (pixel->color p)
+                                         (prof :pixel->color (pixel->color p))
                                          Color/BLACK)))
           (prof :fillRect (.fillRect g x y 1 1)))
         (catch Exception e)))
@@ -148,7 +148,7 @@
     (paintComponent [g]
       (proxy-super paintComponent g)
       (if @*mandelbrot*
-        (paint g @*mandelbrot*)))
+        (profile (paint g @*mandelbrot*))))
     (mousePressed [e])
     (mouseReleased [e])
     (mouseEntered [e])
