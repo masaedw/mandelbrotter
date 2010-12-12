@@ -1,4 +1,5 @@
 (ns mandelbrotter.core
+  (:use clojure.contrib.profile)
   (:require clojure.contrib.seq)
   (:import (java.awt Color
                      Dimension)
@@ -11,27 +12,27 @@
 
 ;;
 ;; データは一次元のシーケンスで、
-;; 座標 [x y] の値は (+ x (+ size-y y)) 番目に存在する
+;; 座標 [x y] の値は (+ x (* size-y y)) 番目に存在する
 (defrecord Pixel [value z divergence? times])
 
 (defn- initialize-data
   [[center-x center-y] [scope-x scope-y] [size-x size-y]]
   (let [origin-x (- center-x (/ scope-x 2))
         origin-y (- center-y (/ scope-y 2))
-        xs (map #(+ (/ (* % scope-y) size-y) origin-y) (range size-y))
-        ys (map #(+ (/ (* % scope-x) size-x) origin-x) (range size-x))]
+        xs (map #(+ (/ (* % scope-x) size-x) origin-x) (range size-x))
+        ys (map #(+ (/ (* % scope-y) size-y) origin-y) (range size-y))]
     (for [y ys
           x xs]
       (Pixel. [x y] [0 0] false 0))))
 
 (defn create-mandelbrot-set
   []
-  (let [ms {:center [0 0.5]
-            :scope [2.5 2.5]
+  (let [ms {:center [0.7 0]
+            :scope [3 3]
             :size [400 400]}]
-    (assoc ms :data (initialize-data (:center ms)
-                                     (:scope ms)
-                                     (:size ms)))))
+    (assoc ms :data (vec (initialize-data (:center ms)
+                                          (:scope ms)
+                                          (:size ms))))))
 
 (defn cabs
   [[x y]]
@@ -57,8 +58,7 @@
 
 (defn next-mandelbrot-set
   [ms]
-  (letfn []
-    (assoc ms :data (map next-pixel (:data ms)))))
+  (assoc ms :data (vec (map next-pixel (:data ms)))))
 
 (defn hsl->rgb
   "Convert [H S L] to [R G B]
@@ -91,55 +91,65 @@
   (let [[#^Float r #^Float g #^Float b] (hsl->rgb h s l)]
     (Color. r g b)))
 
+(defmacro px
+  [& xs]
+  `(try
+     ~@xs
+     (catch Exception e#
+       (prn e#)
+       (throw e#))))
+
 (defn pixel->color
   [p]
   (let [n (/ (- (:times p) (Math/log (Math/log (cabs (:z p)))))
              (Math/log 2))
-        c (mod n 512)]
-    (if (<= c 255)
-      (hsl->color (/ 17 255) 1 (/ c 255))
-      (hsl->color (/ 145 255) 1 (/ (- 511 c) 255)))))
+        max 50
+        c (mod n max)]
+    (if (<= c (/ max 2))
+      (hsl->color (/ 17 255) 1 (/ c (/ max 2)))
+      (hsl->color (/ 145 255) 1 (/ (- max c) (/ max 2))))))
 
 (defn paint [g mandelbrot]
+  (println "*paint*")
   (let [[width height] (:size mandelbrot)
         data (:data mandelbrot)]
     (prn (count (filter :divergence? data)))
     (doseq [[i p] (clojure.contrib.seq/indexed data)]
-      (doto g
-        (.setColor (if (:divergence? p)
-                     (pixel->color p)
-                     Color/BLACK))
-        (.fillRect (- width (rem i width))
-                   (- height (quot i width))
-                   1
-                   1))
+      (try
+        (let [x (- width (rem i width) 1)
+              y (- height (quot i width) 1)]
+          (prof :setColor (.setColor g (if (:divergence? p)
+                                         (pixel->color p)
+                                         Color/BLACK)))
+          (prof :fillRect (.fillRect g x y 1 1)))
+        (catch Exception e)))
+    ))
+
+(def *mandelbrot* (ref nil))
+
+(defn initialize-mandelbrot []
+  (dosync
+   (ref-set *mandelbrot*
+            (create-mandelbrot-set)))
+  nil)
+
+(defn update-mandelbrot [times]
+  (if @*mandelbrot*
+    (dotimes [n times]
+      (dosync
+       (alter *mandelbrot* next-mandelbrot-set))
+      (if (= 0 (mod (+ n 1) 10))
+        (prn (+ n 1)))
       )))
 
 (defn main-panel
-  [mandelbrot]
+  []
   (proxy [JPanel MouseListener] []
     (paintComponent [g]
       (proxy-super paintComponent g)
-      (paint g @mandelbrot))
-    (mousePressed [e]
-      (println "pressed")
-      (dosync
-       (alter mandelbrot
-              #(-> %
-                   next-mandelbrot-set
-                   next-mandelbrot-set
-                   next-mandelbrot-set
-                   next-mandelbrot-set
-                   next-mandelbrot-set
-                   next-mandelbrot-set
-                   next-mandelbrot-set
-                   next-mandelbrot-set
-                   next-mandelbrot-set
-                   next-mandelbrot-set
-                   next-mandelbrot-set
-                   next-mandelbrot-set
-                   next-mandelbrot-set)))
-      (.repaint this))
+      (if @*mandelbrot*
+        (paint g @*mandelbrot*)))
+    (mousePressed [e])
     (mouseReleased [e])
     (mouseEntered [e])
     (mouseExited [e])
@@ -148,9 +158,8 @@
 
 (defn -main
   []
-  (let [ms (ref (create-mandelbrot-set))
-        frame (JFrame. "mandelbrot")
-        panel (main-panel ms)]
+  (let [frame (JFrame. "mandelbrot")
+        panel (main-panel)]
     (doto panel
       (.setPreferredSize (Dimension. 400 400))
       (.addMouseListener panel))
@@ -158,4 +167,4 @@
       (.add panel)
       (.pack)
       (.setVisible true))
-    [ms]))
+    ))
