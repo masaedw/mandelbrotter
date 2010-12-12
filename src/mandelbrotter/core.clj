@@ -33,9 +33,13 @@
                                      (:scope ms)
                                      (:size ms)))))
 
-(defn divergence?
+(defn cabs
   [[x y]]
-  (< 2 (Math/sqrt (+ (* x x) (* y y)))))
+  (Math/sqrt (+ (* x x) (* y y))))
+
+(defn divergence?
+  [c]
+  (< 2 (cabs c)))
 
 (defn next-z
   [[a b] [x y]]
@@ -56,6 +60,50 @@
   (letfn []
     (assoc ms :data (map next-pixel (:data ms)))))
 
+(defn hsl->rgb
+  "Convert [H S L] to [R G B]
+   H [0 1)
+   S [0 1]
+   L [0 1]
+   R [0 1]
+   G [0 1]
+   B [0 1]"
+  [h s l]
+  (if (= s 0)
+    [l l l]
+    (let [m2 (if (<= l 0.5)
+               (* l (+ 1 s))
+               (+ (* l (- 1 s)) s))
+          m1 (- (* 2 l) m2)
+          h-prime (mod (* h 6) 6)
+          v1 (+ m1 (* (- m2 m1) h-prime))
+          v2 (+ m1 (* (- m2 m1) (- 4 h-prime)))]
+      (condp = (int h-prime)
+          0 [m2 v1 m1]
+          1 [v2 m2 m1]
+          2 [m1 m2 v1]
+          3 [m1 v2 m2]
+          4 [v1 m1 m2]
+          5 [m2 m1 v2]))))
+
+(defn hsl->color
+  [h s l]
+  (let [[#^Float r #^Float g #^Float b] (hsl->rgb h s l)]
+    (try
+      (Color. (float r) (float g) (float b))
+      (catch IllegalArgumentException e
+        (prn [h s l (float r) (float g) (float b)])
+        (throw e)))))
+
+(defn pixel->color
+  [p]
+  (let [n (/ (- (:times p) (Math/log (Math/log (cabs (:z p)))))
+             (Math/log 2))
+        c (mod n 512)]
+    (if (<= c 255)
+      (hsl->color (/ 17 255) 1 (/ c 255))
+      (hsl->color (/ 145 255) 1 (/ (- 511 c) 255)))))
+
 (defn paint [g mandelbrot]
   (let [[width height] (:size mandelbrot)
         data (:data mandelbrot)]
@@ -63,7 +111,7 @@
     (doseq [[i p] (clojure.contrib.seq/indexed data)]
       (doto g
         (.setColor (if (:divergence? p)
-                     Color/WHITE
+                     (pixel->color p)
                      Color/BLACK))
         (.fillRect (- width (rem i width))
                    (- height (quot i width))
