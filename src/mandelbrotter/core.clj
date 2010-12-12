@@ -109,6 +109,8 @@
       (hsl->color (/ 17 255) 1 (/ c (/ max 2)))
       (hsl->color (/ 145 255) 1 (/ (- max c) (/ max 2))))))
 
+(def pixel->color (memoize pixel->color))
+
 (defn paint [g mandelbrot]
   (println "*paint*")
   (let [[width height] (:size mandelbrot)
@@ -148,7 +150,7 @@
     (paintComponent [g]
       (proxy-super paintComponent g)
       (if @*mandelbrot*
-        (profile (paint g @*mandelbrot*))))
+        (time (profile (paint g @*mandelbrot*)))))
     (mousePressed [e])
     (mouseReleased [e])
     (mouseEntered [e])
