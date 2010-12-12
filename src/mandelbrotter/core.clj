@@ -89,11 +89,7 @@
 (defn hsl->color
   [h s l]
   (let [[#^Float r #^Float g #^Float b] (hsl->rgb h s l)]
-    (try
-      (Color. (float r) (float g) (float b))
-      (catch IllegalArgumentException e
-        (prn [h s l (float r) (float g) (float b)])
-        (throw e)))))
+    (Color. r g b)))
 
 (defn pixel->color
   [p]
