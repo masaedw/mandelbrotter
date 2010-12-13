@@ -26,13 +26,10 @@
       (Pixel. [x y] [0 0] false 0))))
 
 (defn create-mandelbrot-set
-  []
-  (let [ms {:center [0.7 0]
-            :scope [3 3]
-            :size [400 400]}]
-    (assoc ms :data (vec (initialize-data (:center ms)
-                                          (:scope ms)
-                                          (:size ms))))))
+  [& {:keys [center scope size]
+      :or {center [0.7 0] scope [3 3] size [400 400]}}]
+  (assoc {:center center :scope scope :size size}
+    :data (vec (initialize-data center scope size))))
 
 (defn cabs
   [[x y]]
@@ -129,10 +126,11 @@
 
 (def *mandelbrot* (ref nil))
 
-(defn initialize-mandelbrot []
+(defn initialize-mandelbrot
+  [& ms]
   (dosync
    (ref-set *mandelbrot*
-            (create-mandelbrot-set)))
+            (apply create-mandelbrot-set ms)))
   nil)
 
 (defn update-mandelbrot [times]
