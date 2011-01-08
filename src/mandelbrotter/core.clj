@@ -8,8 +8,8 @@
            (javax.swing JFrame
                         JPanel)))
 
-;; 座標系はOpenGL方式で、
-;; 左下を原点として、右にx、上にyが伸びる
+;; 座標系は左上を原点として、
+;; 右にx、下にyが伸びる
 
 ;;
 ;; データは一次元のシーケンスで、
@@ -21,7 +21,7 @@
   (let [origin-x (- center-x (/ scope-x 2))
         origin-y (- center-y (/ scope-y 2))
         xs (map #(+ (/ (* % scope-x) size-x) origin-x) (range size-x))
-        ys (map #(+ (/ (* % scope-y) size-y) origin-y) (range size-y))]
+        ys (map #(+ (/ (* % scope-y) size-y) origin-y) (reverse (range size-y)))]
     (for [y ys
           x xs]
       (Pixel. [x y] [0 0] false 0))))
@@ -42,7 +42,7 @@
 
 (defn next-z
   [[a b] [x y]]
-  (let [xn (+ (- (* x x) (* y y) a))
+  (let [xn (+ (- (* x x) (* y y)) a)
         yn (+ (* 2 x y) b)]
     [xn yn]))
 
