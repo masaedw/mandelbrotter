@@ -3,7 +3,7 @@
   (:require clojure.contrib.seq)
   (:import (java.awt Color
                      Dimension)
-           (java.awt.event MouseListener)
+           (java.awt.event MouseAdapter)
            (java.awt.image BufferedImage)
            (javax.swing JFrame
                         JPanel)))
@@ -130,38 +130,43 @@
             (apply create-mandelbrot-set ms)))
   nil)
 
-(defn update-mandelbrot [times]
-  (if @*mandelbrot*
-    (dotimes [n times]
-      (dosync
-       (alter *mandelbrot* next-mandelbrot-set))
-      (if (= 0 (mod (+ n 1) 10))
-        (prn (+ n 1)))
-      )))
+(defn update-mandelbrot! [mandelbrot times]
+  (dotimes [n times]
+    (dosync
+     (alter mandelbrot next-mandelbrot-set)))
+  mandelbrot)
 
 (defn main-panel
-  []
-  (proxy [JPanel MouseListener] []
+  [image]
+  (proxy [JPanel] []
     (paintComponent [g]
       (proxy-super paintComponent g)
-      (if @*mandelbrot*
-        (time (.drawImage g (mandelbrot->image @*mandelbrot*) 0 0 this))))
-    (mousePressed [e])
-    (mouseReleased [e])
-    (mouseEntered [e])
-    (mouseExited [e])
-    (mouseClicked [e]
-      (.repaint this))))
+      (if @image
+        (time (.drawImage g @image 0 0 this))))))
 
-(defn -main
-  []
-  (let [frame (JFrame. "mandelbrot")
-        panel (main-panel)]
+(defn create-frame
+  [x y]
+  (let [image (ref nil)
+        frame (JFrame. "mandelbrot")
+        panel (main-panel image)]
     (doto panel
-      (.setPreferredSize (Dimension. 400 400))
-      (.addMouseListener panel))
+      (.setPreferredSize (Dimension. x y)))
     (doto frame
       (.add panel)
       (.pack)
       (.setVisible true))
+    [panel image]))
+
+(defn -main
+  [x y]
+  (let [[panel image] (create-frame x y)
+        mandelbrot (ref (create-mandelbrot-set :center [-0.87591 0.20464]
+                                               :scope [0.5 0.5]
+                                               :size [x y]))]
+    (future (update-mandelbrot! mandelbrot 100))
+    (.addMouseListener panel
+                       (proxy [MouseAdapter] []
+                         (mouseClicked [e]
+                           (dosync (ref-set image (mandelbrot->image @mandelbrot)))
+                           (.repaint panel))))
     ))
