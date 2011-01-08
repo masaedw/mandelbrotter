@@ -4,6 +4,7 @@
   (:import (java.awt Color
                      Dimension)
            (java.awt.event MouseListener)
+           (java.awt.image BufferedImage)
            (javax.swing JFrame
                         JPanel)))
 
@@ -28,7 +29,7 @@
 (defn create-mandelbrot-set
   [& {:keys [center scope size]
       :or {center [0.7 0] scope [3 3] size [400 400]}}]
-  (assoc {:center center :scope scope :size size}
+  (assoc {:center center :scope scope :size size :times 0}
     :data (vec (initialize-data center scope size))))
 
 (defn cabs
@@ -55,7 +56,9 @@
 
 (defn next-mandelbrot-set
   [ms]
-  (assoc ms :data (vec (map next-pixel (:data ms)))))
+  (-> ms
+      (assoc :data (vec (map next-pixel (:data ms))))
+      (assoc :times (+ 1 (:times ms)))))
 
 (defn hsl->rgb
   "Convert [H S L] to [R G B]
@@ -83,10 +86,12 @@
           4 [v1 m1 m2]
           5 [m2 m1 v2]))))
 
-(defn hsl->color
+(defn hsl->rgbint
   [h s l]
   (let [[#^Float r #^Float g #^Float b] (hsl->rgb h s l)]
-    (Color. r g b)))
+    (+ (bit-shift-left (int (* r 255)) 16)
+       (bit-shift-left (int (* g 255)) 8)
+       (bit-shift-left (int (* b 255)) 0))))
 
 (defmacro px
   [& xs]
@@ -96,33 +101,25 @@
        (prn e#)
        (throw e#))))
 
-(defn pixel->color
+(defn pixel->rgbint
   [p]
   (let [n (/ (- (:times p) (Math/log (Math/log (cabs (:z p)))))
              (Math/log 2))
         max 50
         c (mod n max)]
     (if (<= c (/ max 2))
-      (hsl->color (/ 17 255) 1 (/ c (/ max 2)))
-      (hsl->color (/ 145 255) 1 (/ (- max c) (/ max 2))))))
+      (hsl->rgbint (/ 17 255) 1 (/ c (/ max 2)))
+      (hsl->rgbint (/ 145 255) 1 (/ (- max c) (/ max 2))))))
 
-(def pixel->color (memoize pixel->color))
-
-(defn paint [g mandelbrot]
-  (println "*paint*")
-  (let [[width height] (:size mandelbrot)
-        data (:data mandelbrot)]
-    (prn (count (filter :divergence? data)))
-    (doseq [[i p] (clojure.contrib.seq/indexed data)]
-      (try
-        (let [x (- width (rem i width) 1)
-              y (- height (quot i width) 1)]
-          (prof :setColor (.setColor g (if (:divergence? p)
-                                         (prof :pixel->color (pixel->color p))
-                                         Color/BLACK)))
-          (prof :fillRect (.fillRect g x y 1 1)))
-        (catch Exception e)))
-    ))
+(defn mandelbrot->image [m]
+  (let [[x y] (:size m)
+        image (BufferedImage. x y BufferedImage/TYPE_INT_RGB)
+        buffer (-> image .getRaster .getDataBuffer)]
+    (doseq [[i p] (clojure.contrib.seq/indexed (:data m))]
+      (if (= (:times m) (:times p))
+        (.setElem buffer i 0)
+        (.setElem buffer i (pixel->rgbint p))))
+    image))
 
 (def *mandelbrot* (ref nil))
 
@@ -148,7 +145,7 @@
     (paintComponent [g]
       (proxy-super paintComponent g)
       (if @*mandelbrot*
-        (time (profile (paint g @*mandelbrot*)))))
+        (time (.drawImage g (mandelbrot->image @*mandelbrot*) 0 0 this))))
     (mousePressed [e])
     (mouseReleased [e])
     (mouseEntered [e])
